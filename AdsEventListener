@@ -1,0 +1,417 @@
+import notifee, {EventType} from '@notifee/react-native';
+import React, {useEffect, useState} from 'react';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import Geolocation from 'react-native-geolocation-service';
+import {
+  AdEventType,
+  InterstitialAd,
+  TestIds,
+  useInterstitialAd,
+} from 'react-native-google-mobile-ads';
+import {moderateScale} from 'react-native-size-matters';
+import Toast from 'react-native-toast-message';
+import {useDispatch, useSelector} from 'react-redux';
+import ALTITUE_METER from '../assets/svgs/Altitude_Meter.svg';
+import ANCHOR from '../assets/svgs/Anchor.svg';
+import AREA_CODES from '../assets/svgs/AreaCodes.svg';
+import COMPASS from '../assets/svgs/Compass.svg';
+import IP_ADDRESS from '../assets/svgs/IP_Address.svg';
+import LAT_LONG from '../assets/svgs/LAT_LONG.svg';
+import LOCATION_ALERT from '../assets/svgs/LOCATION_ALERT.svg';
+import LOCATION_FIND from '../assets/svgs/Location_Find.svg';
+import LOCATION_GPS from '../assets/svgs/Location_GPS.svg';
+import SPEED_METER from '../assets/svgs/Speed_Meter.svg';
+import WORLD from '../assets/svgs/World.svg';
+import CustomMaps from '../components/CustomMaps';
+import NativeAd from '../components/NativeAdsView';
+import fonts from '../constants/fonts';
+import {MainRoutes} from '../constants/Routes';
+import {hp, SCREEN_WIDTH, wp} from '../constants/scaling';
+import colors from '../constants/theme';
+import {
+  setAddressLocation,
+  setLocation,
+  setLocationPermission,
+  setRouteName,
+} from '../store/actions/userActions';
+import {SearchNumberValidation} from '../validation/SearchNumberValidation';
+
+const adUnitId = __DEV__
+  ? `${TestIds.INTERSTITIAL}`
+  : 'ca-app-pub-xxxxxxxxxxxxx/yyyyyyyyyyyyyy';
+
+const interstitial = InterstitialAd.createForAdRequest(adUnitId, {
+  requestNonPersonalizedAdsOnly: true,
+});
+const data = [
+  {
+    id: '1',
+    icon: (
+      <LOCATION_FIND width={moderateScale(35)} height={moderateScale(40)} />
+    ),
+    text: 'Find Address',
+    route: MainRoutes.AddressFinderScreen,
+  },
+  {
+    id: '2',
+    icon: <SPEED_METER width={moderateScale(30)} height={moderateScale(40)} />,
+    text: 'Speedo Meter',
+    route: MainRoutes.SpeedMeterScreen,
+  },
+  {
+    id: '3',
+    icon: (
+      <WORLD
+        style={{color: colors.textColor}}
+        width={moderateScale(30)}
+        height={moderateScale(40)}
+      />
+    ),
+    text: 'World clock',
+    route: MainRoutes.WorldClockScreen,
+  },
+];
+
+const data2 = [
+  {
+    id: '1',
+    icon: (
+      <AREA_CODES
+        style={{color: colors.textColor}}
+        width={moderateScale(25)}
+        height={moderateScale(35)}
+      />
+    ),
+    text: 'Area Codes',
+    route: MainRoutes.AreaCodeScreen,
+  },
+  {
+    id: '2',
+    icon: <COMPASS width={moderateScale(25)} height={moderateScale(35)} />,
+    text: 'Compass',
+    route: MainRoutes.CompassScreen,
+  },
+  {
+    id: '3',
+    icon: (
+      <ALTITUE_METER width={moderateScale(25)} height={moderateScale(35)} />
+    ),
+    text: 'Altitude Meter',
+    route: MainRoutes.AltitudeMeterScreen,
+  },
+];
+
+const data3 = [
+  {
+    id: '2',
+    icon: (
+      <LOCATION_ALERT width={moderateScale(25)} height={moderateScale(35)} />
+    ),
+    text: 'Location Alert',
+    route: MainRoutes.LocationAlertScreen,
+  },
+  {
+    id: '3',
+    icon: <LAT_LONG width={moderateScale(25)} height={moderateScale(35)} />,
+    text: 'Lat,Long Address',
+    route: MainRoutes.CoordsAddressFinderScreen,
+  },
+  {
+    id: '3',
+    icon: <IP_ADDRESS width={moderateScale(25)} height={moderateScale(35)} />,
+    text: 'IP Address',
+    route: MainRoutes.IPAddressFinderScreen,
+  },
+];
+
+const HomeScreen = ({navigation}) => {
+  interstitial.load();
+  const dispatch = useDispatch();
+  const [ad_count, setAdCount] = useState(3);
+  const [is_ad_loaded, setAdLoaded] = useState(false);
+  const {alerts} = useSelector(state => state.locationAlertReducer);
+  const {routeName} = useSelector(state => state.userReducer);
+  const [mobile_number, setMobileNumber] = useState('');
+  const [country, setCountry] = useState({
+    name: 'Pakistan',
+    code: 'PK',
+    callingCode: '92',
+  });
+
+  useEffect(() => {
+    interstitial.addAdEventsListener(data => {
+      if (data.type == 'error') {
+        if (ad_count != 0) {
+          setAdCount(ad_count => ad_count - 1);
+          interstitial.load();
+          setAdLoaded(false);
+        }
+      }
+      if (data.type == 'loaded') {
+        setAdLoaded(true);
+      }
+      if (data.type == 'closed') {
+        if (routeName != '') {
+          navigation.navigate(routeName);
+          setAdLoaded(false);
+          interstitial.load();
+        }
+      }
+    });
+    return () => interstitial.removeAllListeners();
+  }, []);
+
+  useEffect(() => {
+    getOneTimeLocation();
+    if (alerts.length > 0) {
+      onDisplayNotification(alerts[0]);
+    }
+  }, []);
+
+  const getOneTimeLocation = () => {
+    Geolocation.watchPosition(
+      position => {
+        dispatch(
+          setAddressLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          }),
+        );
+        dispatch(setLocation(position));
+        dispatch(setLocationPermission());
+      },
+      error => {
+        getOneTimeLocation();
+      },
+      {enableHighAccuracy: false, timeout: 15000},
+    );
+  };
+  const validate_mobile_number = () => {
+    SearchNumberValidation(mobile_number, country)
+      .then(data => {
+        navigation.navigate(MainRoutes.FindNumberDetailsScreen, data);
+      })
+      .catch(err => {
+        Toast.show({
+          type: 'error',
+          text1: 'Invalid Number Provided',
+          text2: `Please enter a valid mobile number`,
+          position: 'bottom',
+        });
+      });
+  };
+
+  const onDisplayNotification = async item => {
+    await notifee.requestPermission();
+    const channelId = await notifee.createChannel({
+      id: 'default',
+      name: 'Default Channel',
+    });
+    await notifee.displayNotification({
+      title: `Location tracking ${item.name}`,
+      body: `Your Current Location is ${parseFloat(
+        item.coords.latitude,
+      ).toFixed(3)}, ${parseFloat(item.coords.longitude).toFixed(3)}`,
+      android: {
+        channelId,
+        actions: [
+          {
+            title: 'Stop',
+            pressAction: {
+              id: 'stop',
+            },
+          },
+        ],
+        asForegroundService: true,
+        smallIcon: 'ic_launcher',
+        pressAction: {
+          id: 'default',
+        },
+      },
+    });
+  };
+  const setRouteNamePromise = item => {
+    return new Promise(reslove => {
+      reslove();
+    });
+  };
+  const SetNavigationName = item => {
+    if (is_ad_loaded) {
+      dispatch(setRouteName(item)).then(data => {
+        interstitial.show();
+      });
+    } else {
+      navigation.navigate(item);
+    }
+  };
+  return (
+    <View style={styles.container}>
+      <StatusBar backgroundColor={'#0000'} translucent={true} />
+      <View
+        style={{
+          width: wp(100),
+          position: 'absolute',
+          top: 0,
+
+          height: moderateScale(380),
+        }}>
+        <CustomMaps
+          mobile_number={mobile_number}
+          setMobileNumber={setMobileNumber}
+          country={country}
+          setCountry={setCountry}
+          validate_mobile_number={validate_mobile_number}
+        />
+      </View>
+      <View style={styles.ModalView}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={{backgroundColor: '#fff'}}>
+          <TouchableOpacity
+            onPress={() => SetNavigationName(MainRoutes.GpsTrackerScreen)}
+            style={styles.GpsBox}>
+            <LOCATION_GPS
+              width={moderateScale(45)}
+              height={moderateScale(45)}
+            />
+            <View style={{marginLeft: moderateScale(10)}}>
+              <Text style={styles.GPSText}>GPS Tracker</Text>
+              <Text style={{...styles.GPSText, fontSize: moderateScale(10)}}>
+                Quickly find your address
+              </Text>
+            </View>
+            <ANCHOR
+              style={styles.Anchor}
+              width={moderateScale(12)}
+              height={moderateScale(12)}
+            />
+          </TouchableOpacity>
+          <View style={styles.Row}>
+            {data.map((item, index) => {
+              return (
+                <TouchableOpacity
+                  onPress={() => SetNavigationName(item.route)}
+                  style={styles.IconTextBox}
+                  key={`${index}`}>
+                  {item.icon}
+                  <Text style={styles.boxText}>{item.text}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.AdView}>
+            <NativeAd />
+          </View>
+          <View style={styles.Row}>
+            {data2.map((item, index) => {
+              return (
+                <TouchableOpacity
+                  onPress={() => SetNavigationName(item.route)}
+                  style={styles.IconTextBox}
+                  key={`${index}`}>
+                  {item.icon}
+                  <Text style={{...styles.boxText, fontSize: moderateScale(9)}}>
+                    {item.text}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.Row}>
+            {data3.map((item, index) => {
+              return (
+                <TouchableOpacity
+                  onPress={() => SetNavigationName(item.route)}
+                  style={styles.IconTextBox}
+                  key={`${index}`}>
+                  {item.icon}
+                  <Text style={{...styles.boxText, fontSize: moderateScale(9)}}>
+                    {item.text}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+};
+
+export default HomeScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+  },
+  ModalView: {
+    marginTop: moderateScale(350),
+    borderTopRightRadius: moderateScale(20),
+    borderTopLeftRadius: moderateScale(20),
+    height: hp(100) - moderateScale(310),
+    backgroundColor: colors.white,
+    width: wp(100),
+    paddingTop: moderateScale(15),
+    paddingHorizontal: moderateScale(15),
+  },
+  GpsBox: {
+    backgroundColor: colors.primaryColor,
+    width: SCREEN_WIDTH,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: moderateScale(65),
+    padding: moderateScale(10),
+    borderRadius: moderateScale(10),
+  },
+  Anchor: {
+    position: 'absolute',
+    right: moderateScale(20),
+    alignSelf: 'center',
+  },
+  GPSText: {
+    fontFamily: fonts.Medium,
+    fontSize: moderateScale(14),
+    color: colors.white,
+  },
+  Row: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    height: moderateScale(90),
+    alignSelf: 'center',
+    width: SCREEN_WIDTH,
+    justifyContent: 'space-between',
+  },
+  IconTextBox: {
+    paddingVertical: moderateScale(7),
+    borderColor: colors.borderColor,
+    borderWidth: moderateScale(0.75),
+    borderRadius: moderateScale(6),
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: moderateScale(100),
+  },
+  boxText: {
+    fontFamily: fonts.Medium,
+    fontSize: moderateScale(11),
+    color: colors.textColor,
+  },
+  AdView: {
+    height: moderateScale(150),
+    borderRadius: moderateScale(6),
+    borderWidth: moderateScale(1),
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    borderColor: colors.borderColor,
+  },
+});
